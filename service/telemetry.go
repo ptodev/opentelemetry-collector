@@ -79,7 +79,7 @@ func newColTelemetry(useOtel bool) *telemetryInitializer {
 	}
 }
 
-func (tel *telemetryInitializer) init(buildInfo component.BuildInfo, logger *zap.Logger, cfg telemetry.Config, asyncErrorChannel chan error) error {
+func (tel *telemetryInitializer) init(buildInfo component.BuildInfo, logger *zap.Logger, cfg telemetry.Config, asyncErrorChannel chan error, otelMetricViews []sdkmetric.View) error {
 	if cfg.Metrics.Level == configtelemetry.LevelNone || cfg.Metrics.Address == "" {
 		logger.Info(
 			"Skipping telemetry setup.",
@@ -100,7 +100,7 @@ func (tel *telemetryInitializer) init(buildInfo component.BuildInfo, logger *zap
 		return err
 	}
 
-	return tel.initPrometheus(logger, cfg.Metrics.Address, cfg.Metrics.Level, telAttrs, asyncErrorChannel)
+	return tel.initPrometheus(logger, cfg.Metrics.Address, cfg.Metrics.Level, telAttrs, asyncErrorChannel, otelMetricViews)
 }
 
 func buildTelAttrs(buildInfo component.BuildInfo, cfg telemetry.Config) map[string]string {
@@ -134,10 +134,10 @@ func buildTelAttrs(buildInfo component.BuildInfo, cfg telemetry.Config) map[stri
 	return telAttrs
 }
 
-func (tel *telemetryInitializer) initPrometheus(logger *zap.Logger, address string, level configtelemetry.Level, telAttrs map[string]string, asyncErrorChannel chan error) error {
+func (tel *telemetryInitializer) initPrometheus(logger *zap.Logger, address string, level configtelemetry.Level, telAttrs map[string]string, asyncErrorChannel chan error, otelMetricViews []sdkmetric.View) error {
 	promRegistry := prometheus.NewRegistry()
 	if tel.useOtel {
-		if err := tel.initOpenTelemetry(telAttrs, promRegistry); err != nil {
+		if err := tel.initOpenTelemetry(telAttrs, promRegistry, otelMetricViews); err != nil {
 			return err
 		}
 	} else {
@@ -197,7 +197,7 @@ func (tel *telemetryInitializer) initOpenCensus(level configtelemetry.Level, tel
 	return nil
 }
 
-func (tel *telemetryInitializer) initOpenTelemetry(attrs map[string]string, promRegistry *prometheus.Registry) error {
+func (tel *telemetryInitializer) initOpenTelemetry(attrs map[string]string, promRegistry *prometheus.Registry, otelMetricViews []sdkmetric.View) error {
 	// Initialize the ocRegistry, still used by the process metrics.
 	tel.ocRegistry = ocmetric.NewRegistry()
 	metricproducer.GlobalManager().AddProducer(tel.ocRegistry)
@@ -229,6 +229,8 @@ func (tel *telemetryInitializer) initOpenTelemetry(attrs map[string]string, prom
 		sdkmetric.WithResource(res),
 		sdkmetric.WithReader(exporter),
 		sdkmetric.WithView(batchViews()...),
+		//TODO: Does it matter if batchViews is first and otelMetricViews is second?
+		sdkmetric.WithView(otelMetricViews...),
 	)
 
 	return nil
