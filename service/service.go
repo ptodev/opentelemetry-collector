@@ -66,6 +66,8 @@ type Settings struct {
 
 	OtelMetricViews []sdkmetric.View
 
+	OtelMetricReader sdkmetric.Reader
+
 	// For testing purpose only.
 	useOtel *bool
 }
@@ -109,7 +111,7 @@ func New(ctx context.Context, set Settings, cfg Config) (*Service, error) {
 		MetricsLevel:   cfg.Telemetry.Metrics.Level,
 	}
 
-	if err = srv.telemetryInitializer.init(set.BuildInfo, srv.telemetrySettings.Logger, cfg.Telemetry, set.AsyncErrorChannel, set.OtelMetricViews); err != nil {
+	if err = srv.telemetryInitializer.init(set.BuildInfo, srv.telemetrySettings.Logger, cfg.Telemetry, set.AsyncErrorChannel, set.OtelMetricViews, set.OtelMetricReader); err != nil {
 		return nil, fmt.Errorf("failed to initialize telemetry: %w", err)
 	}
 	srv.telemetrySettings.MeterProvider = srv.telemetryInitializer.mp
