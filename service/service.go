@@ -40,6 +40,7 @@ import (
 	"go.opentelemetry.io/collector/service/internal/graph"
 	"go.opentelemetry.io/collector/service/internal/proctelemetry"
 	"go.opentelemetry.io/collector/service/telemetry"
+	sdkmetric "go.opentelemetry.io/otel/sdk/metric"
 )
 
 // Settings holds configuration for building a new service.
@@ -67,6 +68,8 @@ type Settings struct {
 
 	// LoggingOptions provides a way to change behavior of zap logging.
 	LoggingOptions []zap.Option
+
+	OtelMetricViews []sdkmetric.View
 
 	// For testing purpose only.
 	useOtel *bool
@@ -118,7 +121,7 @@ func New(ctx context.Context, set Settings, cfg Config) (*Service, error) {
 		Resource: pcommonRes,
 	}
 
-	if err = srv.telemetryInitializer.init(res, srv.telemetrySettings, cfg.Telemetry, set.AsyncErrorChannel); err != nil {
+	if err = srv.telemetryInitializer.init(res, srv.telemetrySettings, cfg.Telemetry, set.AsyncErrorChannel, set.OtelMetricViews); err != nil {
 		return nil, fmt.Errorf("failed to initialize telemetry: %w", err)
 	}
 	srv.telemetrySettings.MeterProvider = srv.telemetryInitializer.mp
@@ -164,6 +167,9 @@ func (srv *Service) Shutdown(ctx context.Context) error {
 	var errs error
 
 	// Begin shutdown sequence.
+	if srv.telemetrySettings.Logger == nil {
+		return fmt.Errorf("no logger has been initialised")
+	}
 	srv.telemetrySettings.Logger.Info("Starting shutdown...")
 
 	if err := srv.host.serviceExtensions.NotifyPipelineNotReady(); err != nil {
