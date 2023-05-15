@@ -118,7 +118,7 @@ func (tel *telemetryInitializer) init(res *resource.Resource, settings component
 		return err
 	}
 
-	return tel.initPrometheus(res, settings.Logger, cfg.Metrics.Address, cfg.Metrics.Level, asyncErrorChannel, otelMetricViews)
+	return tel.initPrometheus(res, settings.Logger, cfg.Metrics.Address, cfg.Metrics.Level, asyncErrorChannel, otelMetricViews, otelMetricReader)
 }
 
 func (tel *telemetryInitializer) initPrometheus(res *resource.Resource, logger *zap.Logger, address string, level configtelemetry.Level, asyncErrorChannel chan error, otelMetricViews []sdkmetric.View, otelMetricReader sdkmetric.Reader) error {
