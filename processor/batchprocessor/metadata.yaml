@@ -115,3 +115,11 @@ config:
         identifier: _
         type: struct{}
         nillable: true
+    auth:
+      type: object
+      goJSONSchema:
+        type: configoptional.Optional[configauth.Config]
+        nillable: true
+        imports:
+        - go.opentelemetry.io/collector/config/configoptional
+        - go.opentelemetry.io/collector/config/configauth

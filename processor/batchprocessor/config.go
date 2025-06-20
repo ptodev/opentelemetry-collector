@@ -4,12 +4,17 @@ package batchprocessor
 
 import "encoding/json"
 import "fmt"
+import "go.opentelemetry.io/collector/config/configauth"
+import "go.opentelemetry.io/collector/config/configoptional"
 import "time"
 
 // Configuration parameters for the batch processor.
 type Config struct {
 	// Prevent unkeyed literal initialization.
 	_ struct{} `mapstructure:"_"`
+
+	// Auth corresponds to the JSON schema field "auth".
+	Auth configoptional.Optional[configauth.Config] `mapstructure:"auth"`
 
 	// MetadataCardinalityLimit indicates the maximum number of batcher instances that
 	// will be created through a distinct combination of MetadataKeys.
