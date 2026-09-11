@@ -15,6 +15,7 @@ import (
 	"strconv"
 	"time"
 
+	"go.opentelemetry.io/otel/metric"
 	"go.uber.org/zap"
 	"google.golang.org/genproto/googleapis/rpc/status"
 	"google.golang.org/protobuf/proto"
@@ -36,14 +37,15 @@ import (
 
 type baseExporter struct {
 	// Input configuration.
-	config      *Config
-	client      *http.Client
-	tracesURL   string
-	metricsURL  string
-	logsURL     string
-	profilesURL string
-	logger      *zap.Logger
-	settings    component.TelemetrySettings
+	config           *Config
+	client           *http.Client
+	tracesURL        string
+	metricsURL       string
+	logsURL          string
+	profilesURL      string
+	logger           *zap.Logger
+	settings         component.TelemetrySettings
+	partialSuccesses metric.Int64Counter
 	// Default user-agent header.
 	userAgent string
 }
@@ -69,13 +71,22 @@ func newExporter(cfg component.Config, set exporter.Settings) (*baseExporter, er
 
 	userAgent := fmt.Sprintf("%s/%s (%s/%s)",
 		set.BuildInfo.Description, set.BuildInfo.Version, runtime.GOOS, runtime.GOARCH)
+	partialSuccesses, err := set.MeterProvider.Meter("go.opentelemetry.io/collector/exporter/otlphttpexporter").Int64Counter(
+		"otelcol_exporter_partial_successes",
+		metric.WithDescription("Number of OTLP export responses that reported a partial success."),
+		metric.WithUnit("{response}"),
+	)
+	if err != nil {
+		return nil, fmt.Errorf("create partial success counter: %w", err)
+	}
 
 	// client construction is deferred to start
 	return &baseExporter{
-		config:    oCfg,
-		logger:    set.Logger,
-		userAgent: userAgent,
-		settings:  set.TelemetrySettings,
+		config:           oCfg,
+		logger:           set.Logger,
+		partialSuccesses: partialSuccesses,
+		userAgent:        userAgent,
+		settings:         set.TelemetrySettings,
 	}, nil
 }
 
@@ -367,6 +378,7 @@ func (e *baseExporter) tracesPartialSuccessHandler(protoBytes []byte, contentTyp
 
 	partialSuccess := exportResponse.PartialSuccess()
 	if partialSuccess.ErrorMessage() != "" || partialSuccess.RejectedSpans() != 0 {
+		e.partialSuccesses.Add(context.Background(), 1)
 		e.logger.Warn("Partial success response",
 			zap.String("message", exportResponse.PartialSuccess().ErrorMessage()),
 			zap.Int64("dropped_spans", exportResponse.PartialSuccess().RejectedSpans()),
@@ -397,6 +409,7 @@ func (e *baseExporter) metricsPartialSuccessHandler(protoBytes []byte, contentTy
 
 	partialSuccess := exportResponse.PartialSuccess()
 	if partialSuccess.ErrorMessage() != "" || partialSuccess.RejectedDataPoints() != 0 {
+		e.partialSuccesses.Add(context.Background(), 1)
 		e.logger.Warn("Partial success response",
 			zap.String("message", exportResponse.PartialSuccess().ErrorMessage()),
 			zap.Int64("dropped_data_points", exportResponse.PartialSuccess().RejectedDataPoints()),
@@ -427,6 +440,7 @@ func (e *baseExporter) logsPartialSuccessHandler(protoBytes []byte, contentType 
 
 	partialSuccess := exportResponse.PartialSuccess()
 	if partialSuccess.ErrorMessage() != "" || partialSuccess.RejectedLogRecords() != 0 {
+		e.partialSuccesses.Add(context.Background(), 1)
 		e.logger.Warn("Partial success response",
 			zap.String("message", exportResponse.PartialSuccess().ErrorMessage()),
 			zap.Int64("dropped_log_records", exportResponse.PartialSuccess().RejectedLogRecords()),
@@ -457,6 +471,7 @@ func (e *baseExporter) profilesPartialSuccessHandler(protoBytes []byte, contentT
 
 	partialSuccess := exportResponse.PartialSuccess()
 	if partialSuccess.ErrorMessage() != "" || partialSuccess.RejectedProfiles() != 0 {
+		e.partialSuccesses.Add(context.Background(), 1)
 		e.logger.Warn("Partial success response",
 			zap.String("message", exportResponse.PartialSuccess().ErrorMessage()),
 			zap.Int64("dropped_samples", exportResponse.PartialSuccess().RejectedProfiles()),

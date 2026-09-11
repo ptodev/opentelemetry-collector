@@ -19,6 +19,7 @@ import (
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+	"go.opentelemetry.io/otel/sdk/metric/metricdata"
 	"go.uber.org/zap"
 	"go.uber.org/zap/zaptest/observer"
 	"google.golang.org/grpc/codes"
@@ -486,6 +487,39 @@ func TestPartialSuccessInvalidBody(t *testing.T) {
 			assert.ErrorContains(t, err, "error parsing protobuf response:")
 		})
 	}
+}
+
+func TestPartialSuccessRecordsTelemetry(t *testing.T) {
+	telemetry := componenttest.NewTelemetry()
+	t.Cleanup(func() {
+		require.NoError(t, telemetry.Shutdown(context.Background()))
+	})
+
+	set := exportertest.NewNopSettings(metadata.Type)
+	set.TelemetrySettings = telemetry.NewTelemetrySettings()
+	exp, err := newExporter(createDefaultConfig(), set)
+	require.NoError(t, err)
+
+	for _, tt := range []struct {
+		handler    partialSuccessHandler
+		serializer responseSerializerProvider
+	}{
+		{exp.tracesPartialSuccessHandler, provideTracesResponseSerializer},
+		{exp.metricsPartialSuccessHandler, provideMetricsResponseSerializer},
+		{exp.logsPartialSuccessHandler, provideLogsResponseSerializer},
+		{exp.profilesPartialSuccessHandler, provideProfilesResponseSerializer},
+	} {
+		response, err := tt.serializer().MarshalProto()
+		require.NoError(t, err)
+		require.NoError(t, tt.handler(response, protobufContentType))
+	}
+
+	observed, err := telemetry.GetMetric("otelcol_exporter_partial_successes")
+	require.NoError(t, err)
+	counter, ok := observed.Data.(metricdata.Sum[int64])
+	require.True(t, ok)
+	require.Len(t, counter.DataPoints, 1)
+	assert.Equal(t, int64(4), counter.DataPoints[0].Value)
 }
 
 func TestPartialSuccessUnsupportedContentType(t *testing.T) {

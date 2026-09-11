@@ -1,0 +1,31 @@
+# Manifest for the OpenTelemetry Collector Builder (ocb).
+#
+# Builds a local-only Collector whose only job is: receive traces from your
+# app, hold each trace until it's complete, keep only the ones at least
+# min_bytes large (see collector-config.yaml), and forward those to a local
+# Tempo. Everything else (metrics/logs pipelines, most extensions) is left
+# out on purpose - this is a single-purpose diagnostic tool, not a general
+# collector build.
+#
+# Build with:
+#   go run go.opentelemetry.io/collector/cmd/builder@v0.158.0 --config=builder-config.yaml
+
+dist:
+  name: trace-debug-collector
+  description: Local collector that tail-samples traces by exact size
+  output_path: ./dist
+  version: 0.1.0
+
+receivers:
+  - gomod: go.opentelemetry.io/collector/receiver/otlpreceiver v0.158.0
+
+processors:
+  - gomod: github.com/open-telemetry/opentelemetry-collector-contrib/processor/tailsamplingprocessor v0.158.0
+
+exporters:
+  - gomod: go.opentelemetry.io/collector/exporter/otlpexporter v0.158.0
+  - gomod: go.opentelemetry.io/collector/exporter/debugexporter v0.158.0
+
+extensions:
+  - gomod: github.com/open-telemetry/opentelemetry-collector/dev/trace-debug/extension/tracesizepolicy v0.1.0
+    path: ./extension/tracesizepolicy

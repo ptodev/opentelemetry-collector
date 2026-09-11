@@ -1,0 +1,48 @@
+# Config for the local trace-debug-collector (see builder-config.yaml).
+#
+# Point your app's OTLP exporter at this collector instead of (or in
+# addition to, via your app's own config) your normal backend. It buffers
+# each trace to completion, keeps only traces at least MIN_TRACE_BYTES
+# large, and forwards those to a local Tempo so you can inspect the big
+# traces your production backend usually rejects or drops.
+
+extensions:
+  tracesizepolicy:
+
+receivers:
+  otlp:
+    protocols:
+      grpc:
+        endpoint: localhost:4317
+      http:
+        endpoint: localhost:4318
+
+processors:
+  tail_sampling:
+    # How long to buffer spans for a trace before deciding. Raise this if
+    # your big traces take longer than 10s to finish arriving.
+    decision_wait: 10s
+    num_traces: 5000
+    policies:
+      - name: big-traces
+        type: tracesizepolicy
+        tracesizepolicy:
+          # Exact, not approximate: tailsamplingprocessor already tracks
+          # each trace's accumulated encoded size as spans arrive.
+          min_bytes: 5000000 # 5 MB
+
+exporters:
+  otlp/tempo:
+    endpoint: localhost:4319
+    tls:
+      insecure: true
+  debug:
+    verbosity: basic
+
+service:
+  extensions: [tracesizepolicy]
+  pipelines:
+    traces:
+      receivers: [otlp]
+      processors: [tail_sampling]
+      exporters: [otlp/tempo, debug]
