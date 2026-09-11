@@ -14,11 +14,13 @@ import (
 	"go.opentelemetry.io/collector/pipeline"
 	"go.opentelemetry.io/collector/pipeline/xpipeline"
 	"go.opentelemetry.io/collector/receiver"
+	"go.opentelemetry.io/collector/service/hostcapabilities"
 	"go.opentelemetry.io/collector/service/internal/attribute"
 	"go.opentelemetry.io/collector/service/internal/builders"
 	"go.opentelemetry.io/collector/service/internal/componentattribute"
 	"go.opentelemetry.io/collector/service/internal/metadata"
 	"go.opentelemetry.io/collector/service/internal/obsconsumer"
+	"go.opentelemetry.io/collector/service/internal/tracetap"
 )
 
 // A receiver instance can be shared by multiple pipelines of the same type.
@@ -43,6 +45,7 @@ func (n *receiverNode) buildComponent(ctx context.Context,
 	info component.BuildInfo,
 	builder *builders.ReceiverBuilder,
 	nexts []baseConsumer,
+	traceTaps *tracetap.Registry,
 ) error {
 	set := receiver.Settings{
 		ID:                n.componentID,
@@ -67,8 +70,10 @@ func (n *receiverNode) buildComponent(ctx context.Context,
 		for _, next := range nexts {
 			consumers = append(consumers, next.(consumer.Traces))
 		}
+		tapped := traceTaps.Wrap(fanoutconsumer.NewTraces(consumers),
+			tracetap.NewPoint(component.KindReceiver, n.componentID, "", hostcapabilities.TraceTapPositionOutput))
 		n.Component, err = builder.CreateTraces(ctx, set,
-			obsconsumer.NewTraces(fanoutconsumer.NewTraces(consumers), producedSettings),
+			obsconsumer.NewTraces(tapped, producedSettings),
 		)
 	case pipeline.SignalMetrics:
 		var consumers []consumer.Metrics

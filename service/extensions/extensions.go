@@ -267,6 +267,7 @@ var (
 	_ hostcapabilities.ModuleInfo       = (*hostWrapper)(nil)
 	_ hostcapabilities.ExposeExporters  = (*hostWrapper)(nil) //nolint:staticcheck // SA1019
 	_ hostcapabilities.ComponentFactory = (*hostWrapper)(nil)
+	_ hostcapabilities.TraceTaps        = (*hostWrapper)(nil)
 )
 
 type hostWrapper struct {
@@ -307,4 +308,18 @@ func (host *hostWrapper) GetFactory(kind component.Kind, componentType component
 		return cf.GetFactory(kind, componentType)
 	}
 	return nil
+}
+
+func (host *hostWrapper) TraceTaps() []hostcapabilities.TraceTap {
+	if tt, ok := host.Host.(hostcapabilities.TraceTaps); ok {
+		return tt.TraceTaps()
+	}
+	return nil
+}
+
+func (host *hostWrapper) RegisterTraceObserver(observer hostcapabilities.TraceObserver) func() {
+	if tt, ok := host.Host.(hostcapabilities.TraceTaps); ok {
+		return tt.RegisterTraceObserver(observer)
+	}
+	return func() {}
 }

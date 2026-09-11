@@ -13,6 +13,7 @@ import (
 	otlphttpexporter "go.opentelemetry.io/collector/exporter/otlphttpexporter"
 	"go.opentelemetry.io/collector/extension"
 	memorylimiterextension "go.opentelemetry.io/collector/extension/memorylimiterextension"
+	tracetapextension "go.opentelemetry.io/collector/extension/tracetapextension"
 	zpagesextension "go.opentelemetry.io/collector/extension/zpagesextension"
 	"go.opentelemetry.io/collector/otelcol"
 	"go.opentelemetry.io/collector/processor"
@@ -47,6 +48,7 @@ func components() (otelcol.Factories, error) {
 
 	factories.Extensions, err = otelcol.MakeFactoryMap[extension.Factory](
 		memorylimiterextension.NewFactory(),
+		tracetapextension.NewFactory(),
 		zpagesextension.NewFactory(),
 	)
 	if err != nil {
@@ -54,6 +56,7 @@ func components() (otelcol.Factories, error) {
 	}
 	factories.ExtensionModules = makeModulesMap(factories.Extensions, map[component.Type]string{
 		memorylimiterextension.NewFactory().Type(): "go.opentelemetry.io/collector/extension/memorylimiterextension v0.158.0",
+		tracetapextension.NewFactory().Type():      "go.opentelemetry.io/collector/extension/tracetapextension v0.158.0",
 		zpagesextension.NewFactory().Type():        "go.opentelemetry.io/collector/extension/zpagesextension v0.158.0",
 	})
 

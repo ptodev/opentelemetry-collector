@@ -1,0 +1,20 @@
+description: Config configures the trace_tap extension.
+type: object
+properties:
+  default_stream_duration:
+    description: Used when a stream request doesn't specify its own duration.
+    type: string
+  max_stream_duration:
+    description: Bounds how long any single stream may run, regardless of what a request asks for.
+    type: string
+  max_concurrent_streams:
+    description: Bounds how many stream requests can be active at once.
+    type: integer
+  max_spans_per_second:
+    description: Hard safety cap on spans emitted per second per stream, independent of upstream pipeline filtering.
+    type: integer
+  stream_buffer_size:
+    description: Bounds the number of trace batches buffered per stream between the pipeline and the HTTP writer.
+    type: integer
+allOf:
+  - $ref: /config/confighttp.server_config

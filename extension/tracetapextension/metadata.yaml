@@ -1,0 +1,16 @@
+display_name: Trace Tap Extension
+type: trace_tap
+github_project: open-telemetry/opentelemetry-collector
+
+status:
+  disable_codecov_badge: true
+  class: extension
+  stability:
+    development: [extension]
+  distributions: []
+  codeowners:
+    active: []
+
+tests:
+  config:
+    endpoint: localhost:1777

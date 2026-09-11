@@ -1,0 +1,16 @@
+change_type: new_component
+
+component: extension/tracetapextension
+
+note: Add the `trace_tap` extension, which exposes an HTTP API to stream live trace data from a running Collector's trace-facing pipeline boundaries for local debugging.
+
+issues: []
+
+subtext: |
+  Every receiver/processor/exporter/connector gets an observable input/output
+  boundary automatically. With no active stream, observing a boundary costs
+  one atomic load; while a stream is active, the tapped boundary pays one
+  `ptrace.Traces` clone per batch so the stream's copy is safe from
+  downstream in-place mutation.
+
+change_logs: [user]

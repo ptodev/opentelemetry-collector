@@ -1,0 +1,28 @@
+extensions:
+  trace_tap:
+    endpoint: localhost:1778
+    max_stream_duration: 2h
+    default_stream_duration: 2h
+
+receivers:
+  otlp:
+    protocols:
+      grpc:
+        endpoint: localhost:5327
+      http:
+        endpoint: localhost:5328
+
+exporters:
+  debug:
+    verbosity: basic
+
+service:
+  extensions: [trace_tap]
+  telemetry:
+    metrics:
+      level: none
+  pipelines:
+    traces:
+      receivers: [otlp]
+      processors: []
+      exporters: [debug]

@@ -13,12 +13,14 @@ import (
 	"go.opentelemetry.io/collector/exporter"
 	"go.opentelemetry.io/collector/pipeline"
 	"go.opentelemetry.io/collector/pipeline/xpipeline"
+	"go.opentelemetry.io/collector/service/hostcapabilities"
 	"go.opentelemetry.io/collector/service/internal/attribute"
 	"go.opentelemetry.io/collector/service/internal/builders"
 	"go.opentelemetry.io/collector/service/internal/componentattribute"
 	"go.opentelemetry.io/collector/service/internal/metadata"
 	"go.opentelemetry.io/collector/service/internal/obsconsumer"
 	"go.opentelemetry.io/collector/service/internal/refconsumer"
+	"go.opentelemetry.io/collector/service/internal/tracetap"
 )
 
 var _ consumerNode = (*exporterNode)(nil)
@@ -50,6 +52,7 @@ func (n *exporterNode) buildComponent(
 	tel component.TelemetrySettings,
 	info component.BuildInfo,
 	builder *builders.ExporterBuilder,
+	traceTaps *tracetap.Registry,
 ) error {
 	set := exporter.Settings{
 		ID:                n.componentID,
@@ -76,6 +79,8 @@ func (n *exporterNode) buildComponent(
 		}
 		n.consumer = obsconsumer.NewTraces(n.Component.(consumer.Traces), consumedSettings)
 		n.consumer = refconsumer.NewTraces(n.consumer.(consumer.Traces))
+		n.consumer = traceTaps.Wrap(n.consumer.(consumer.Traces),
+			tracetap.NewPoint(component.KindExporter, n.componentID, "", hostcapabilities.TraceTapPositionInput))
 	case pipeline.SignalMetrics:
 		n.Component, err = builder.CreateMetrics(ctx, set)
 		if err != nil {

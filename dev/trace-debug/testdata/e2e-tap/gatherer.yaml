@@ -1,0 +1,42 @@
+extensions:
+  tracesizepolicy:
+
+receivers:
+  otlp:
+    protocols:
+      grpc:
+        endpoint: localhost:4317
+      http:
+        endpoint: localhost:4318
+
+processors:
+  tail_sampling:
+    decision_wait: 5s
+    num_traces: 5000
+    policies:
+      - name: big-traces
+        type: tracesizepolicy
+        tracesizepolicy:
+          # Lowered from the 5MB production default for this local e2e demo,
+          # so the loadgen's synthetic "big" traces (a few hundred spans)
+          # cross the threshold without needing multi-megabyte payloads.
+          min_bytes: 20000 # 20 KB
+
+exporters:
+  otlp/tempo:
+    endpoint: localhost:4319
+    tls:
+      insecure: true
+  debug:
+    verbosity: basic
+
+service:
+  extensions: [tracesizepolicy]
+  telemetry:
+    metrics:
+      level: none
+  pipelines:
+    traces:
+      receivers: [otlp]
+      processors: [tail_sampling]
+      exporters: [otlp/tempo, debug]

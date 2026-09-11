@@ -13,12 +13,14 @@ import (
 	"go.opentelemetry.io/collector/pipeline"
 	"go.opentelemetry.io/collector/pipeline/xpipeline"
 	"go.opentelemetry.io/collector/processor"
+	"go.opentelemetry.io/collector/service/hostcapabilities"
 	"go.opentelemetry.io/collector/service/internal/attribute"
 	"go.opentelemetry.io/collector/service/internal/builders"
 	"go.opentelemetry.io/collector/service/internal/componentattribute"
 	"go.opentelemetry.io/collector/service/internal/metadata"
 	"go.opentelemetry.io/collector/service/internal/obsconsumer"
 	"go.opentelemetry.io/collector/service/internal/refconsumer"
+	"go.opentelemetry.io/collector/service/internal/tracetap"
 )
 
 var _ consumerNode = (*processorNode)(nil)
@@ -50,6 +52,7 @@ func (n *processorNode) buildComponent(ctx context.Context,
 	info component.BuildInfo,
 	builder *builders.ProcessorBuilder,
 	next baseConsumer,
+	traceTaps *tracetap.Registry,
 ) error {
 	set := processor.Settings{
 		ID:                n.componentID,
@@ -75,14 +78,18 @@ func (n *processorNode) buildComponent(ctx context.Context,
 
 	switch n.pipelineID.Signal() {
 	case pipeline.SignalTraces:
+		outputTapped := traceTaps.Wrap(next.(consumer.Traces),
+			tracetap.NewPoint(component.KindProcessor, n.componentID, n.pipelineID.String(), hostcapabilities.TraceTapPositionOutput))
 		n.Component, err = builder.CreateTraces(ctx, set,
-			obsconsumer.NewTraces(next.(consumer.Traces), producedSettings),
+			obsconsumer.NewTraces(outputTapped, producedSettings),
 		)
 		if err != nil {
 			return fmt.Errorf("failed to create %q processor, in pipeline %q: %w", set.ID, n.pipelineID.String(), err)
 		}
 		n.consumer = obsconsumer.NewTraces(n.Component.(consumer.Traces), consumedSettings)
 		n.consumer = refconsumer.NewTraces(n.consumer.(consumer.Traces))
+		n.consumer = traceTaps.Wrap(n.consumer.(consumer.Traces),
+			tracetap.NewPoint(component.KindProcessor, n.componentID, n.pipelineID.String(), hostcapabilities.TraceTapPositionInput))
 	case pipeline.SignalMetrics:
 		n.Component, err = builder.CreateMetrics(ctx, set,
 			obsconsumer.NewMetrics(next.(consumer.Metrics), producedSettings))

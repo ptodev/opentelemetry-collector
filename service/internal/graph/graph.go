@@ -41,6 +41,7 @@ import (
 	"go.opentelemetry.io/collector/service/internal/builders"
 	"go.opentelemetry.io/collector/service/internal/capabilityconsumer"
 	"go.opentelemetry.io/collector/service/internal/status"
+	"go.opentelemetry.io/collector/service/internal/tracetap"
 	"go.opentelemetry.io/collector/service/pipelines"
 )
 
@@ -58,6 +59,11 @@ type Settings struct {
 	PipelineConfigs pipelines.Config
 
 	ReportStatus status.ServiceStatusFunc
+
+	// TraceTaps catalogs trace-facing component boundaries as they're built.
+	// May be nil, in which case wrapping is skipped and boundaries are not
+	// observable (used by validate-only code paths).
+	TraceTaps *tracetap.Registry
 }
 
 type Graph struct {
@@ -303,14 +309,14 @@ func (g *Graph) buildComponents(ctx context.Context, set Settings) error {
 	for _, node := range slices.Backward(nodes) {
 		switch n := node.(type) {
 		case *receiverNode:
-			err = n.buildComponent(ctx, set.Telemetry, set.BuildInfo, set.ReceiverBuilder, g.nextConsumers(n.ID()))
+			err = n.buildComponent(ctx, set.Telemetry, set.BuildInfo, set.ReceiverBuilder, g.nextConsumers(n.ID()), set.TraceTaps)
 		case *processorNode:
 			// nextConsumers is guaranteed to be length 1.  Either it is the next processor or it is the fanout node for the exporters.
-			err = n.buildComponent(ctx, set.Telemetry, set.BuildInfo, set.ProcessorBuilder, g.nextConsumers(n.ID())[0])
+			err = n.buildComponent(ctx, set.Telemetry, set.BuildInfo, set.ProcessorBuilder, g.nextConsumers(n.ID())[0], set.TraceTaps)
 		case *exporterNode:
-			err = n.buildComponent(ctx, set.Telemetry, set.BuildInfo, set.ExporterBuilder)
+			err = n.buildComponent(ctx, set.Telemetry, set.BuildInfo, set.ExporterBuilder, set.TraceTaps)
 		case *connectorNode:
-			err = n.buildComponent(ctx, set.Telemetry, set.BuildInfo, set.ConnectorBuilder, g.nextConsumers(n.ID()))
+			err = n.buildComponent(ctx, set.Telemetry, set.BuildInfo, set.ConnectorBuilder, g.nextConsumers(n.ID()), set.TraceTaps)
 		case *capabilitiesNode:
 			capability := consumer.Capabilities{
 				// The fanOutNode represents the aggregate capabilities of the exporters in the pipeline.
@@ -675,7 +681,7 @@ func (g *Graph) UpdateReceivers(ctx context.Context, set Settings,
 				continue // shared receiver already built
 			}
 			built[nodeID] = true
-			if err := rn.buildComponent(ctx, set.Telemetry, set.BuildInfo, set.ReceiverBuilder, g.nextConsumers(nodeID)); err != nil {
+			if err := rn.buildComponent(ctx, set.Telemetry, set.BuildInfo, set.ReceiverBuilder, g.nextConsumers(nodeID), set.TraceTaps); err != nil {
 				return fmt.Errorf("failed to build receiver %q: %w", rn.componentID, err)
 			}
 		}

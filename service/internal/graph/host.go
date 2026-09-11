@@ -18,6 +18,7 @@ import (
 	"go.opentelemetry.io/collector/service/internal/builders"
 	"go.opentelemetry.io/collector/service/internal/moduleinfo"
 	"go.opentelemetry.io/collector/service/internal/status"
+	"go.opentelemetry.io/collector/service/internal/tracetap"
 	"go.opentelemetry.io/collector/service/internal/zpages"
 )
 
@@ -26,6 +27,7 @@ var (
 	_ hostcapabilities.ModuleInfo       = (*Host)(nil)
 	_ hostcapabilities.ExposeExporters  = (*Host)(nil) //nolint:staticcheck // SA1019
 	_ hostcapabilities.ComponentFactory = (*Host)(nil)
+	_ hostcapabilities.TraceTaps        = (*Host)(nil)
 )
 
 type Host struct {
@@ -42,7 +44,20 @@ type Host struct {
 	Pipelines         *Graph
 	ServiceExtensions *extensions.Extensions
 
+	// TraceTapRegistry catalogs trace-facing pipeline boundaries and lets a
+	// caller (typically the tracetapextension) observe traffic at them. May
+	// be nil, e.g. on validate-only code paths that never start pipelines.
+	TraceTapRegistry *tracetap.Registry
+
 	Reporter status.Reporter
+}
+
+func (host *Host) TraceTaps() []hostcapabilities.TraceTap {
+	return host.TraceTapRegistry.TraceTaps()
+}
+
+func (host *Host) RegisterTraceObserver(observer hostcapabilities.TraceObserver) func() {
+	return host.TraceTapRegistry.RegisterTraceObserver(observer)
 }
 
 func (host *Host) GetFactory(kind component.Kind, componentType component.Type) component.Factory {

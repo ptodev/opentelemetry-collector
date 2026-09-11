@@ -15,6 +15,7 @@ import (
 	"go.opentelemetry.io/collector/consumer/xconsumer"
 	"go.opentelemetry.io/collector/pipeline"
 	"go.opentelemetry.io/collector/pipeline/xpipeline"
+	"go.opentelemetry.io/collector/service/hostcapabilities"
 	"go.opentelemetry.io/collector/service/internal/attribute"
 	"go.opentelemetry.io/collector/service/internal/builders"
 	"go.opentelemetry.io/collector/service/internal/capabilityconsumer"
@@ -22,6 +23,7 @@ import (
 	"go.opentelemetry.io/collector/service/internal/metadata"
 	"go.opentelemetry.io/collector/service/internal/obsconsumer"
 	"go.opentelemetry.io/collector/service/internal/refconsumer"
+	"go.opentelemetry.io/collector/service/internal/tracetap"
 )
 
 const pipelineIDAttrKey = "otelcol.pipeline.id"
@@ -56,6 +58,7 @@ func (n *connectorNode) buildComponent(
 	info component.BuildInfo,
 	builder *builders.ConnectorBuilder,
 	nexts []baseConsumer,
+	traceTaps *tracetap.Registry,
 ) error {
 	set := connector.Settings{
 		ID:                n.componentID,
@@ -65,13 +68,13 @@ func (n *connectorNode) buildComponent(
 
 	switch n.rcvrPipelineType {
 	case pipeline.SignalTraces:
-		return n.buildTraces(ctx, set, builder, nexts)
+		return n.buildTraces(ctx, set, builder, nexts, traceTaps)
 	case pipeline.SignalMetrics:
-		return n.buildMetrics(ctx, set, builder, nexts)
+		return n.buildMetrics(ctx, set, builder, nexts, traceTaps)
 	case pipeline.SignalLogs:
-		return n.buildLogs(ctx, set, builder, nexts)
+		return n.buildLogs(ctx, set, builder, nexts, traceTaps)
 	case xpipeline.SignalProfiles:
-		return n.buildProfiles(ctx, set, builder, nexts)
+		return n.buildProfiles(ctx, set, builder, nexts, traceTaps)
 	}
 	return nil
 }
@@ -81,6 +84,7 @@ func (n *connectorNode) buildTraces(
 	set connector.Settings,
 	builder *builders.ConnectorBuilder,
 	nexts []baseConsumer,
+	traceTaps *tracetap.Registry,
 ) error {
 	tb, err := metadata.NewTelemetryBuilder(set.TelemetrySettings)
 	if err != nil {
@@ -100,13 +104,16 @@ func (n *connectorNode) buildTraces(
 
 	consumers := make(map[pipeline.ID]consumer.Traces, len(nexts))
 	for _, next := range nexts {
-		consumers[next.(*capabilitiesNode).pipelineID] = obsconsumer.NewTraces(
-			next.(consumer.Traces),
+		pipelineID := next.(*capabilitiesNode).pipelineID
+		tapped := traceTaps.Wrap(next.(consumer.Traces),
+			tracetap.NewPoint(component.KindConnector, n.componentID, pipelineID.String(), hostcapabilities.TraceTapPositionOutput))
+		consumers[pipelineID] = obsconsumer.NewTraces(
+			tapped,
 			producedSettings,
 			obsconsumer.WithStaticDataPointAttribute(
 				otelattr.String(
 					pipelineIDAttrKey,
-					next.(*capabilitiesNode).pipelineID.String(),
+					pipelineID.String(),
 				),
 			),
 		)
@@ -129,6 +136,8 @@ func (n *connectorNode) buildTraces(
 			consumedSettings,
 		)
 		n.consumer = refconsumer.NewTraces(n.consumer.(consumer.Traces))
+		n.consumer = traceTaps.Wrap(n.consumer.(consumer.Traces),
+			tracetap.NewPoint(component.KindConnector, n.componentID, "", hostcapabilities.TraceTapPositionInput))
 	case pipeline.SignalMetrics:
 		n.Component, err = builder.CreateMetricsToTraces(ctx, set, next)
 		if err != nil {
@@ -159,6 +168,7 @@ func (n *connectorNode) buildMetrics(
 	set connector.Settings,
 	builder *builders.ConnectorBuilder,
 	nexts []baseConsumer,
+	traceTaps *tracetap.Registry,
 ) error {
 	tb, err := metadata.NewTelemetryBuilder(set.TelemetrySettings)
 	if err != nil {
@@ -214,6 +224,8 @@ func (n *connectorNode) buildMetrics(
 		}
 		n.consumer = obsconsumer.NewTraces(n.Component.(consumer.Traces), consumedSettings)
 		n.consumer = refconsumer.NewTraces(n.consumer.(consumer.Traces))
+		n.consumer = traceTaps.Wrap(n.consumer.(consumer.Traces),
+			tracetap.NewPoint(component.KindConnector, n.componentID, "", hostcapabilities.TraceTapPositionInput))
 	case pipeline.SignalLogs:
 		n.Component, err = builder.CreateLogsToMetrics(ctx, set, next)
 		if err != nil {
@@ -237,6 +249,7 @@ func (n *connectorNode) buildLogs(
 	set connector.Settings,
 	builder *builders.ConnectorBuilder,
 	nexts []baseConsumer,
+	traceTaps *tracetap.Registry,
 ) error {
 	tb, err := metadata.NewTelemetryBuilder(set.TelemetrySettings)
 	if err != nil {
@@ -292,6 +305,8 @@ func (n *connectorNode) buildLogs(
 		}
 		n.consumer = obsconsumer.NewTraces(n.Component.(consumer.Traces), consumedSettings)
 		n.consumer = refconsumer.NewTraces(n.consumer.(consumer.Traces))
+		n.consumer = traceTaps.Wrap(n.consumer.(consumer.Traces),
+			tracetap.NewPoint(component.KindConnector, n.componentID, "", hostcapabilities.TraceTapPositionInput))
 	case pipeline.SignalMetrics:
 		n.Component, err = builder.CreateMetricsToLogs(ctx, set, next)
 		if err != nil {
@@ -315,6 +330,7 @@ func (n *connectorNode) buildProfiles(
 	set connector.Settings,
 	builder *builders.ConnectorBuilder,
 	nexts []baseConsumer,
+	traceTaps *tracetap.Registry,
 ) error {
 	tb, err := metadata.NewTelemetryBuilder(set.TelemetrySettings)
 	if err != nil {
@@ -370,6 +386,8 @@ func (n *connectorNode) buildProfiles(
 		}
 		n.consumer = obsconsumer.NewTraces(n.Component.(consumer.Traces), consumedSettings)
 		n.consumer = refconsumer.NewTraces(n.consumer.(consumer.Traces))
+		n.consumer = traceTaps.Wrap(n.consumer.(consumer.Traces),
+			tracetap.NewPoint(component.KindConnector, n.componentID, "", hostcapabilities.TraceTapPositionInput))
 	case pipeline.SignalMetrics:
 		n.Component, err = builder.CreateMetricsToProfiles(ctx, set, next)
 		if err != nil {

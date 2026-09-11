@@ -28,6 +28,7 @@ import (
 	"go.opentelemetry.io/collector/service/extensions"
 	"go.opentelemetry.io/collector/service/internal/builders"
 	"go.opentelemetry.io/collector/service/internal/graph"
+	"go.opentelemetry.io/collector/service/internal/tracetap"
 	"go.opentelemetry.io/collector/service/internal/metadata"
 	"go.opentelemetry.io/collector/service/internal/metricviews"
 	"go.opentelemetry.io/collector/service/internal/moduleinfo"
@@ -139,6 +140,7 @@ func New(ctx context.Context, set Settings, cfg Config) (_ *Service, resultErr e
 			ModuleInfos:       set.ModuleInfos,
 			BuildInfo:         set.BuildInfo,
 			AsyncErrorChannel: set.AsyncErrorChannel,
+			TraceTapRegistry:  tracetap.NewRegistry(),
 		},
 		configSnapshot: configSnapshot,
 	}
@@ -373,6 +375,7 @@ func (srv *Service) initGraph(ctx context.Context, cfg Config) error {
 		ConnectorBuilder: srv.host.Connectors,
 		PipelineConfigs:  cfg.Pipelines,
 		ReportStatus:     srv.host.Reporter.ReportStatus,
+		TraceTaps:        srv.host.TraceTapRegistry,
 	}
 	var err error
 	if srv.host.Pipelines, err = graph.Build(ctx, srv.graphSettings); err != nil {
